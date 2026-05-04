@@ -19,13 +19,13 @@ DESTINACE = {
     "Praha 7 Jankovcova": (0, 0, "domov"),
 
     # === Praha pobočky ===
-    "Praha 4 - Háje, Kulhavého": (26, 40, "pobocka"),
+    "Praha 4 - Háje": (26, 40, "pobocka"),
     "Praha 4, Budějovická": (10, 25, "pobocka"),
-    "Praha 5 - Anděl, Štefánikova": (8, 25, "pobocka"),
-    "Praha 6 - Dejvice, Banskobystrická": (7, 15, "pobocka"),
-    "Praha 7 - Holešovice, Jateční": (2, 10, "pobocka"),
+    "Praha 5 - Anděl": (8, 25, "pobocka"),
+    "Praha 6 - Dejvice": (7, 15, "pobocka"),
+    "Praha 7 - Holešovice": (2, 10, "pobocka"),
     "Praha 9 - Čakovice": (10, 15, "pobocka"),
-    "Praha 9 - Horní Počernice, Do Čertous": (18, 30, "pobocka"),
+    "Praha 9 - Horní Počernice": (18, 30,),
 
     # === Středočeský kraj ===
     "Benešov, Žižkova": (60, 50, "pobocka"),
@@ -35,7 +35,8 @@ DESTINACE = {
     "Kolín, Jaselská": (70, 60, "pobocka"),
     "Mělník, Bezručova": (35, 40, "pobocka"),
     "Mladá Boleslav, náměstí Republiky": (60, 60, "pobocka"),
-    "Příbram, Žežická": (75, 60, "pobocka"),
+    "Příbram, Žežická": (50, 55, "pobocka"),
+    "Poděbrady": (75, 60,),
     "Úžice, Areál ProLogis Park": (25, 25, "sklad"),
     "Zdiby, Zdibsko, Klecany": (13, 15, "sklad"),
 
@@ -133,6 +134,7 @@ KRIZOVE_VZDALENOSTI = {
     ("Chotýčany D3 (pumpa)", "České Budějovice, Průběžná"): 30,
     ("České Budějovice, Průběžná", "Chotýčany D3 (pumpa)"): 30,
     ("Zelenáč D2 (pumpa, směr BA)", "SKLC3, Šákoňská cesta"): 100,
+    ("Praha 9 - Horní Počernice", "Horní Počernice (pumpa)"): 17,
     ("Zelenáč D2 (pumpa, směr BA)", "Bratislava, Mlynské nivy"): 80,
 }
 
