@@ -140,14 +140,15 @@ UCEL_OPTIONS = [
     "Pracovní jednání",
     "Pracovní schůzka",
     "Pracovní cesta",
-    "Schůzka u klienta",
+    "Schůzka",
+    "Schůzka + tankování",
     "Audit pobočky",
     "Návrat",
     "Návrat + tankování",
     "Cesta + tankování",
     "Ubytování",
-    "Závěrečné jednání",
     "Sklad - kontrola",
+    "Návštěva skladu",
 ]
 
 # ============================================================
