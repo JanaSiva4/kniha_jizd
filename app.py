@@ -28,17 +28,17 @@ DESTINACE = {
     "Praha 9 - Horní Počernice": (18, 30,),
 
     # === Středočeský kraj ===
-    "Benešov, Žižkova": (60, 50, "pobocka"),
-    "Beroun, Plzeňská": (40, 40, "pobocka"),
-    "Chrášťany, Severní": (20, 30, "pobocka_sklad"),
-    "Kladno, Arménská (NC Oaza)": (31, 40, "pobocka"),
-    "Kolín, Jaselská": (70, 60, "pobocka"),
-    "Mělník, Bezručova": (35, 40, "pobocka"),
-    "Mladá Boleslav, náměstí Republiky": (60, 60, "pobocka"),
-    "Příbram, Žežická": (50, 55, "pobocka"),
+    "Benešov": (60, 50, "pobocka"),
+    "Beroun": (40, 40, "pobocka"),
+    "Chrášťany": (20, 30, "pobocka_sklad"),
+    "Kladno": (31, 40, "pobocka"),
+    "Kolín": (70, 60, "pobocka"),
+    "Mělník": (35, 40, "pobocka"),
+    "Mladá Boleslav": (60, 60, "pobocka"),
+    "Příbram": (50, 55, "pobocka"),
     "Poděbrady": (75, 60,),
-    "Úžice, Areál ProLogis Park": (25, 25, "sklad"),
-    "Zdiby, Zdibsko, Klecany": (13, 15, "sklad"),
+    "Úžice": (25, 25, "sklad"),
+    "Zdiby": (13, 15, "sklad"),
 
     # === Severní/Západní Čechy ===
     "Děčín, Ústecká": (110, 90, "pobocka"),
