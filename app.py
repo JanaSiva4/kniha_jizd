@@ -1,71 +1,139 @@
 """
-Kniha jízd - generátor
+Kniha jízd - generátor v2
 Streamlit app pro automatizaci tvorby měsíční knihy jízd
 """
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from io import BytesIO
-import json
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 # ============================================================
-# KONFIGURACE - destinace a vzdálenosti (uprav podle potřeby)
+# KOMPLETNÍ SEZNAM DESTINACÍ z reálného seznamu poboček
+# Formát: nazev: (km, cas_min, typ)
 # ============================================================
-DEFAULT_DESTINACE = {
-    "Praha 7 Jankovcova": 0,
-    "SKLC3 (Šakoňská cesta)": 340,
-    "Bratislava - hotel": 330,
-    "Brno": 205,
-    "Jihlava": 130,
-    "Olomouc": 280,
-    "Ostrava": 370,
-    "Hradec Králové": 115,
-    "Pardubice": 105,
-    "České Budějovice": 150,
-    "Plzeň": 95,
-    "Karlovy Vary": 130,
-    "Liberec": 105,
-    "Ústí nad Labem": 90,
-    "Mladá Boleslav": 70,
-    "Kladno": 30,
-    "Beroun": 30,
-    "Mělník": 40,
-    "Říčany": 25,
-    "Poděbrady": 50,
-    "Týnec nad Labem": 90,
-    "Prostějov": 270,
-    "Chomutov": 95,
-    "Trnava": 380,
-    "Nitra": 410,
-    "Praha 4 - Pankrác": 8,
-    "Praha 4 Olbrachtova (pumpa)": 8,
-    "Praha HP II (pumpa)": 12,
-    "Chotýčany D3 (pumpa)": 100,
-    "Zelenáč D2 (pumpa)": 250,
+DESTINACE = {
+    # === Domov / kancelář ===
+    "Praha 7 Jankovcova": (0, 0, "domov"),
+
+    # === Praha pobočky ===
+    "Praha 4 - Háje, Kulhavého": (26, 40, "pobocka"),
+    "Praha 4, Budějovická": (10, 25, "pobocka"),
+    "Praha 5 - Anděl, Štefánikova": (8, 25, "pobocka"),
+    "Praha 6 - Dejvice, Banskobystrická": (7, 15, "pobocka"),
+    "Praha 7 - Holešovice, Jateční": (2, 10, "pobocka"),
+    "Praha 9 - Čakovice": (10, 15, "pobocka"),
+    "Praha 9 - Horní Počernice, Do Čertous": (18, 30, "pobocka"),
+
+    # === Středočeský kraj ===
+    "Benešov, Žižkova": (60, 50, "pobocka"),
+    "Beroun, Plzeňská": (40, 40, "pobocka"),
+    "Chrášťany, Severní": (20, 30, "pobocka_sklad"),
+    "Kladno, Arménská (NC Oaza)": (31, 40, "pobocka"),
+    "Kolín, Jaselská": (70, 60, "pobocka"),
+    "Mělník, Bezručova": (35, 40, "pobocka"),
+    "Mladá Boleslav, náměstí Republiky": (60, 60, "pobocka"),
+    "Příbram, Žežická": (75, 60, "pobocka"),
+    "Úžice, Areál ProLogis Park": (25, 25, "sklad"),
+    "Zdiby, Zdibsko, Klecany": (13, 15, "sklad"),
+
+    # === Severní/Západní Čechy ===
+    "Děčín, Ústecká": (110, 90, "pobocka"),
+    "Chomutov, Žižkovo nám.": (98, 80, "pobocka"),
+    "Karlovy Vary, Sokolovská": (130, 120, "pobocka"),
+    "Liberec, Palachova": (110, 80, "pobocka"),
+    "Most, tř. Budovatelů": (95, 75, "pobocka"),
+    "Plzeň, Truhlářská": (98, 75, "pobocka"),
+    "Ústí nad Labem, Špitálské náměstí": (86, 60, "pobocka"),
+
+    # === Jižní Čechy + Vysočina ===
+    "České Budějovice, Průběžná": (162, 120, "pobocka"),
+    "Jihlava, Chlumova": (140, 105, "pobocka"),
+    "Tábor, Kamenická": (100, 105, "pobocka"),
+    "Třebíč, Znojemská": (180, 120, "pobocka"),
+
+    # === Východní Čechy ===
+    "Hradec Králové, Hořická": (111, 80, "pobocka"),
+    "Pardubice, Palackého": (122, 90, "pobocka"),
+
+    # === Morava ===
+    "Brno - Lískovec, Netroufalky": (213, 150, "pobocka"),
+    "Brno - střed, Skořepka": (221, 150, "pobocka"),
+    "Frýdek-Místek, Na Příkopě": (382, 255, "pobocka"),
+    "Olomouc, Nedvědova": (287, 210, "pobocka"),
+    "Opava, Pekařská": (380, 260, "pobocka"),
+    "Ostrava, Novinářská": (380, 250, "pobocka"),
+    "Prostějov, Poděbradovo nám.": (270, 195, "pobocka"),
+    "Zlín, Jana Antonína Bati": (303, 210, "pobocka"),
+
+    # === Slovensko ===
+    "Banská Bystrica, Cesta na Štadión": (550, 310, "pobocka"),
+    "Bratislava, Mlynské nivy": (350, 210, "pobocka"),
+    "Bratislava Petržalka, Rusovská cesta": (350, 210, "pobocka"),
+    "Dunajská Streda, Vajanského": (394, 230, "pobocka"),
+    "Košice, Štúrova": (681, 440, "pobocka"),
+    "Nitra, Akademická": (440, 260, "pobocka"),
+    "Poprad, Jiřího Wolkera": (565, 380, "pobocka"),
+    "Prešov, Arm. gen. Svobodu": (651, 425, "pobocka"),
+    "Prievidza, Bojnická cesta": (411, 300, "pobocka"),
+    "Senec, Diaľničná cesta": (350, 225, "pobocka_sklad"),
+    "SKLC3, Šákoňská cesta": (368, 220, "sklad"),
+    "Trenčín, Gen. M. R. Štefánika": (350, 245, "pobocka"),
+    "Trnava, Starohájska": (402, 235, "pobocka"),
+    "Žilina, Komenského": (430, 285, "pobocka"),
+
+    # === Maďarsko ===
+    "Budapešť centrála (CBP), Róbert Károly": (548, 335, "pobocka_sklad"),
+    "Budapest Blaha, József krt": (542, 335, "pobocka"),
+    "Budapest Újbuda, Fehérvári út": (539, 325, "pobocka"),
+    "HULC1 Budapest Sziget, Szigetszentmiklós": (548, 335, "pobocka_sklad"),
+
+    # === Rakousko ===
+    "Wien Karlsplatz, Getreidemarkt": (348, 225, "pobocka"),
+
+    # === Pumpy a hotely (časté zastávky) ===
+    "Praha 4 - Olbrachtova (pumpa)": (8, 20, "pumpa"),
+    "Praha - Horní Počernice II (pumpa)": (15, 25, "pumpa"),
+    "Chotýčany D3 (pumpa)": (130, 90, "pumpa"),
+    "Zelenáč D2 (pumpa, směr BA)": (270, 165, "pumpa"),
+    "Bratislava - hotel": (350, 210, "hotel"),
 }
 
-# Vzdálenosti mezi vybranými páry (pokud nejede z/do Jankovcové)
+# Křížové vzdálenosti mezi destinacemi
 KRIZOVE_VZDALENOSTI = {
-    ("SKLC3 (Šakoňská cesta)", "Bratislava - hotel"): 12,
-    ("Bratislava - hotel", "SKLC3 (Šakoňská cesta)"): 12,
-    ("SKLC3 (Šakoňská cesta)", "Trnava"): 50,
-    ("Trnava", "SKLC3 (Šakoňská cesta)"): 50,
-    ("SKLC3 (Šakoňská cesta)", "Brno"): 130,
-    ("Brno", "SKLC3 (Šakoňská cesta)"): 130,
-    ("Hradec Králové", "Pardubice"): 25,
-    ("Pardubice", "Hradec Králové"): 25,
-    ("Hradec Králové", "Olomouc"): 145,
-    ("Olomouc", "Ostrava"): 100,
-    ("Brno", "Olomouc"): 80,
-    ("Brno", "Jihlava"): 90,
-    ("Plzeň", "Karlovy Vary"): 85,
-    ("České Budějovice", "Plzeň"): 130,
-    ("Chotýčany D3 (pumpa)", "České Budějovice"): 50,
-    ("Zelenáč D2 (pumpa)", "SKLC3 (Šakoňská cesta)"): 80,
-    ("Zelenáč D2 (pumpa)", "Bratislava - hotel"): 90,
+    # SK
+    ("SKLC3, Šákoňská cesta", "Bratislava, Mlynské nivy"): 18,
+    ("Bratislava, Mlynské nivy", "SKLC3, Šákoňská cesta"): 18,
+    ("SKLC3, Šákoňská cesta", "Bratislava - hotel"): 18,
+    ("Bratislava - hotel", "SKLC3, Šákoňská cesta"): 18,
+    ("SKLC3, Šákoňská cesta", "Bratislava Petržalka, Rusovská cesta"): 22,
+    ("SKLC3, Šákoňská cesta", "Trnava, Starohájska"): 50,
+    ("Trnava, Starohájska", "SKLC3, Šákoňská cesta"): 50,
+    ("SKLC3, Šákoňská cesta", "Brno - střed, Skořepka"): 145,
+    ("Brno - střed, Skořepka", "SKLC3, Šákoňská cesta"): 145,
+    ("Bratislava, Mlynské nivy", "Trnava, Starohájska"): 55,
+    ("Bratislava, Mlynské nivy", "Nitra, Akademická"): 95,
+    ("Trnava, Starohájska", "Nitra, Akademická"): 50,
+
+    # CZ
+    ("Hradec Králové, Hořická", "Pardubice, Palackého"): 26,
+    ("Pardubice, Palackého", "Hradec Králové, Hořická"): 26,
+    ("Hradec Králové, Hořická", "Olomouc, Nedvědova"): 175,
+    ("Olomouc, Nedvědova", "Ostrava, Novinářská"): 95,
+    ("Olomouc, Nedvědova", "Prostějov, Poděbradovo nám."): 18,
+    ("Brno - střed, Skořepka", "Olomouc, Nedvědova"): 80,
+    ("Brno - střed, Skořepka", "Jihlava, Chlumova"): 90,
+    ("Brno - střed, Skořepka", "Zlín, Jana Antonína Bati"): 100,
+    ("Plzeň, Truhlářská", "Karlovy Vary, Sokolovská"): 82,
+    ("České Budějovice, Průběžná", "Plzeň, Truhlářská"): 134,
+
+    # Pumpy
+    ("Chotýčany D3 (pumpa)", "České Budějovice, Průběžná"): 30,
+    ("České Budějovice, Průběžná", "Chotýčany D3 (pumpa)"): 30,
+    ("Zelenáč D2 (pumpa, směr BA)", "SKLC3, Šákoňská cesta"): 100,
+    ("Zelenáč D2 (pumpa, směr BA)", "Bratislava, Mlynské nivy"): 80,
 }
 
 UCEL_OPTIONS = [
@@ -73,35 +141,23 @@ UCEL_OPTIONS = [
     "Pracovní schůzka",
     "Pracovní cesta",
     "Schůzka u klienta",
+    "Audit pobočky",
     "Návrat",
     "Návrat + tankování",
     "Cesta + tankování",
     "Ubytování",
     "Závěrečné jednání",
+    "Sklad - kontrola",
 ]
 
 # ============================================================
 # FUNKCE
 # ============================================================
-def vzdalenost(odkud, kam):
-    """Spočítá vzdálenost mezi dvěma body"""
-    if (odkud, kam) in KRIZOVE_VZDALENOSTI:
-        return KRIZOVE_VZDALENOSTI[(odkud, kam)]
-    # Z/do Jankovcové
-    if odkud == "Praha 7 Jankovcova":
-        return st.session_state.destinace.get(kam, 0)
-    if kam == "Praha 7 Jankovcova":
-        return st.session_state.destinace.get(odkud, 0)
-    # Pokud nic, vrátíme rozdíl od Jankovcové (hrubý odhad)
-    od = st.session_state.destinace.get(odkud, 0)
-    do = st.session_state.destinace.get(kam, 0)
-    return abs(od - do)
-
-
 def init_state():
-    """Inicializace session state"""
     if "destinace" not in st.session_state:
-        st.session_state.destinace = DEFAULT_DESTINACE.copy()
+        st.session_state.destinace = DESTINACE.copy()
+    if "krizove" not in st.session_state:
+        st.session_state.krizove = KRIZOVE_VZDALENOSTI.copy()
     if "tankovani" not in st.session_state:
         st.session_state.tankovani = []
     if "jizdy" not in st.session_state:
@@ -110,12 +166,31 @@ def init_state():
         st.session_state.stav_pocatek = 136030
 
 
+def vzdalenost(odkud, kam):
+    if odkud == kam:
+        return 0
+    if (odkud, kam) in st.session_state.krizove:
+        return st.session_state.krizove[(odkud, kam)]
+    if odkud == "Praha 7 Jankovcova":
+        return st.session_state.destinace.get(kam, (0, 0, ""))[0]
+    if kam == "Praha 7 Jankovcova":
+        return st.session_state.destinace.get(odkud, (0, 0, ""))[0]
+    od = st.session_state.destinace.get(odkud, (0, 0, ""))[0]
+    do = st.session_state.destinace.get(kam, (0, 0, ""))[0]
+    return abs(od - do)
+
+
+def cas_jizdy(odkud, kam):
+    if odkud == "Praha 7 Jankovcova":
+        return st.session_state.destinace.get(kam, (0, 0, ""))[1]
+    if kam == "Praha 7 Jankovcova":
+        return st.session_state.destinace.get(odkud, (0, 0, ""))[1]
+    return int(vzdalenost(odkud, kam) * 1.0)
+
+
 def parsuj_tankovani_excel(uploaded_file):
-    """Parsuje Excel s tankováními - flexibilně hledá sloupce"""
     df = pd.read_excel(uploaded_file)
     df.columns = [str(c).strip() for c in df.columns]
-
-    # Hledáme sloupce s datem, stavem KM, množstvím a místem
     sloupce = {col.lower(): col for col in df.columns}
 
     def najdi(klic_castecne):
@@ -127,7 +202,7 @@ def parsuj_tankovani_excel(uploaded_file):
     col_datum = najdi("datum")
     col_km = najdi("stav km") or najdi("stav")
     col_litry = najdi("množství") or najdi("mnozstvi") or najdi("litry")
-    col_misto = najdi("čerpací") or najdi("cerpaci") or najdi("pumpa") or najdi("místo")
+    col_misto = najdi("čerpací") or najdi("cerpaci") or najdi("pumpa") or najdi("stanic")
     col_cena = najdi("částka") or najdi("castka") or najdi("cena")
 
     tankovani = []
@@ -140,47 +215,32 @@ def parsuj_tankovani_excel(uploaded_file):
             cena = float(row[col_cena]) if col_cena and pd.notna(row[col_cena]) else None
             if km and litry:
                 tankovani.append({
-                    "datum": datum,
-                    "km": km,
-                    "litry": litry,
-                    "misto": misto.strip(),
-                    "cena": cena,
+                    "datum": datum, "km": km, "litry": litry,
+                    "misto": misto.strip(), "cena": cena,
                 })
         except Exception:
             continue
-    # Seřadíme podle KM
     tankovani.sort(key=lambda x: x["km"])
     return tankovani
 
 
-def export_excel(jizdy, tankovani_info, mesic_rok, stav_pocatek):
-    """Vytvoří Excel knihu jízd"""
+def export_excel(jizdy, mesic_rok, stav_pocatek):
     wb = Workbook()
     ws = wb.active
     ws.title = mesic_rok
 
-    # Hlavička metadat
-    ws['A1'] = "Typ vozidla:"
-    ws['B1'] = "doplnit"
-    ws['A2'] = "RZ (SPZ) vozidla:"
-    ws['B2'] = "5SD7805"
-    ws['A3'] = "Palivo:"
-    ws['B3'] = "Diesel"
-    ws['A4'] = "Spotřeba paliva dle VTP"
-    ws['B4'] = 3.7
-    ws['A5'] = "Počáteční stav tachometru:"
-    ws['B5'] = stav_pocatek
-
+    ws['A1'] = "Typ vozidla:"; ws['B1'] = "doplnit"
+    ws['A2'] = "RZ (SPZ) vozidla:"; ws['B2'] = "5SD7805"
+    ws['A3'] = "Palivo:"; ws['B3'] = "Diesel"
+    ws['A4'] = "Spotřeba paliva dle VTP"; ws['B4'] = 3.7
+    ws['A5'] = "Počáteční stav tachometru:"; ws['B5'] = stav_pocatek
     final_km = jizdy[-1]["km_konec"] if jizdy else stav_pocatek
-    ws['A6'] = "Konečný stav tachometru:"
-    ws['B6'] = final_km
-    ws['A7'] = "Soukromé km:"
-    ws['B7'] = 0
+    ws['A6'] = "Konečný stav tachometru:"; ws['B6'] = final_km
+    ws['A7'] = "Soukromé km:"; ws['B7'] = 0
 
     for i in range(1, 8):
         ws[f'A{i}'].font = Font(name='Arial', bold=True, size=10)
 
-    # Hlavička tabulky
     headers = ['Datum', 'Výchozí místo', 'Cílové místo', 'Účel cesty',
                'Čas odjezdu', 'Čas příjezdu', 'Druh jízdy',
                'Stav km na začátku', 'Stav km na konci',
@@ -196,50 +256,40 @@ def export_excel(jizdy, tankovani_info, mesic_rok, stav_pocatek):
     HEADER_ROW = 9
     for col, h in enumerate(headers, 1):
         c = ws.cell(row=HEADER_ROW, column=col, value=h)
-        c.font = arial_bold
-        c.fill = header_fill
-        c.alignment = center
-        c.border = border
+        c.font = arial_bold; c.fill = header_fill
+        c.alignment = center; c.border = border
 
-    # Data
     row = HEADER_ROW + 1
     for j in jizdy:
         values = [
-            j["datum"],
-            j["odkud"],
-            j["kam"],
-            j["ucel"],
-            j.get("cas_odj", ""),
-            j.get("cas_prij", ""),
-            j["druh"],
-            j["km_zacatek"],
-            j["km_konec"],
-            j["km_pocet"],
-            j.get("litry"),
-            j.get("cena"),
-            j.get("ridic", "MaWy"),
+            j["datum"], j["odkud"], j["kam"], j["ucel"],
+            j.get("cas_odj", ""), j.get("cas_prij", ""), j["druh"],
+            j["km_zacatek"], j["km_konec"], j["km_pocet"],
+            j.get("litry"), j.get("cena"), j.get("ridic", "MaWy"),
         ]
         for col, v in enumerate(values, 1):
             c = ws.cell(row=row, column=col, value=v)
-            c.font = arial
-            c.border = border
-            if col == 10:
-                c.fill = yellow_fill
+            c.font = arial; c.border = border
+            if col == 10: c.fill = yellow_fill
             if col >= 5:
                 c.alignment = Alignment(horizontal='center', vertical='center')
         row += 1
 
-    # Šířky sloupců
-    widths = [11, 24, 28, 26, 11, 11, 11, 16, 16, 13, 13, 11, 9]
+    widths = [11, 28, 32, 26, 11, 11, 11, 16, 16, 13, 13, 11, 9]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.row_dimensions[HEADER_ROW].height = 32
 
-    # Uložení do bufferu
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
     return buffer
+
+
+def format_cas(minuty):
+    h = minuty // 60
+    m = minuty % 60
+    return f"{h}:{m:02d}"
 
 
 # ============================================================
@@ -249,9 +299,9 @@ st.set_page_config(page_title="Kniha jízd", page_icon="📕", layout="wide")
 init_state()
 
 st.title("📕 Kniha jízd – generátor")
-st.caption("Automatizace měsíčního zápisu knihy jízd")
+st.caption(f"Automatizace měsíčního zápisu • {len(st.session_state.destinace)} destinací v databázi")
 
-# --- KROK 1: Nastavení měsíce
+# --- KROK 1
 with st.expander("⚙️ Krok 1 – nastavení měsíce", expanded=True):
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -264,92 +314,98 @@ with st.expander("⚙️ Krok 1 – nastavení měsíce", expanded=True):
     with col3:
         st.session_state.stav_pocatek = st.number_input(
             "Počáteční stav tachometru (km)",
-            min_value=0,
-            value=st.session_state.stav_pocatek,
-            step=1,
+            min_value=0, value=st.session_state.stav_pocatek, step=1,
         )
 
-# --- KROK 2: Nahrání tankování
+# --- KROK 2
 with st.expander("⛽ Krok 2 – výpis tankování", expanded=True):
-    st.markdown(
-        "Stáhni si výpis z Teams tabulky jako Excel a nahraj sem. "
-        "Appka automaticky najde stavy KM, litry, ceny a místa."
-    )
-    uploaded = st.file_uploader("Nahrát Excel s tankováními", type=["xlsx", "xls"])
-
+    st.markdown("Nahraj Excel z Teams, nebo přidávej tankování ručně.")
+    uploaded = st.file_uploader("Nahrát Excel", type=["xlsx", "xls"])
     if uploaded:
         try:
             st.session_state.tankovani = parsuj_tankovani_excel(uploaded)
             st.success(f"✓ Načteno {len(st.session_state.tankovani)} tankování")
         except Exception as e:
-            st.error(f"Chyba při načítání: {e}")
+            st.error(f"Chyba: {e}")
 
-    # Manuální přidání tankování
     if st.button("➕ Přidat tankování ručně"):
         st.session_state.tankovani.append({
-            "datum": date.today(),
-            "km": 0,
-            "litry": 0.0,
-            "misto": "",
-            "cena": 0.0,
+            "datum": date.today(), "km": 0, "litry": 0.0, "misto": "", "cena": 0.0,
         })
 
     if st.session_state.tankovani:
-        st.markdown("**Načtená tankování (lze upravit):**")
+        st.markdown("**Tankování (lze upravit):**")
         for i, t in enumerate(st.session_state.tankovani):
             cols = st.columns([2, 3, 2, 2, 2, 1])
             with cols[0]:
-                t["datum"] = st.date_input(
-                    "Datum", value=t["datum"] if isinstance(t["datum"], (date, datetime)) else date.today(),
-                    key=f"t_datum_{i}", label_visibility="collapsed"
-                )
+                t["datum"] = st.date_input("Datum",
+                    value=t["datum"] if isinstance(t["datum"], (date, datetime)) else date.today(),
+                    key=f"t_datum_{i}", label_visibility="collapsed")
             with cols[1]:
                 t["misto"] = st.text_input("Místo", value=t["misto"], key=f"t_misto_{i}", label_visibility="collapsed")
             with cols[2]:
                 t["km"] = st.number_input("KM", value=int(t["km"]), key=f"t_km_{i}", label_visibility="collapsed")
             with cols[3]:
-                t["litry"] = st.number_input("Litry", value=float(t["litry"]), step=0.01, key=f"t_litry_{i}", label_visibility="collapsed")
+                t["litry"] = st.number_input("L", value=float(t["litry"]), step=0.01, key=f"t_litry_{i}", label_visibility="collapsed")
             with cols[4]:
-                t["cena"] = st.number_input("Cena", value=float(t["cena"] or 0), step=0.01, key=f"t_cena_{i}", label_visibility="collapsed")
+                t["cena"] = st.number_input("Kč", value=float(t["cena"] or 0), step=0.01, key=f"t_cena_{i}", label_visibility="collapsed")
             with cols[5]:
                 if st.button("🗑", key=f"t_del_{i}"):
                     st.session_state.tankovani.pop(i)
                     st.rerun()
 
-# --- KROK 3: Jízdy
+# --- KROK 3
 with st.expander("🚗 Krok 3 – jízdy", expanded=True):
     if not st.session_state.tankovani:
         st.info("Nejdřív nahraj nebo přidej tankování.")
     else:
-        # Výpočet úseků mezi tankováními
         prev_km = st.session_state.stav_pocatek
-        st.markdown("**Úseky mezi tankováními (musí přesně sedět):**")
-
+        st.markdown("**Úseky mezi tankováními:**")
         for i, t in enumerate(st.session_state.tankovani):
             cil_km = t["km"] - prev_km
-            # Spočítat km zapsaných v jízdách v tomto úseku
             zapsano = sum(j["km_pocet"] for j in st.session_state.jizdy
                           if prev_km <= j["km_zacatek"] < t["km"])
             chybi = cil_km - zapsano
+            datum_str = t["datum"].strftime("%-d.%-m.") if isinstance(t["datum"], (date, datetime)) else str(t["datum"])
             if chybi == 0:
-                st.success(f"✓ Úsek do {t['datum']} {t['misto']} (cíl {cil_km:,} km): zapsáno {zapsano:,} km – sedí")
+                st.success(f"✓ Úsek do {datum_str} {t['misto']} (cíl {cil_km:,} km): zapsáno {zapsano:,} km")
             elif chybi > 0:
-                st.error(f"✗ Úsek do {t['datum']} {t['misto']} (cíl {cil_km:,} km): zapsáno {zapsano:,} km – chybí {chybi:,} km")
+                st.error(f"✗ Úsek do {datum_str} {t['misto']} (cíl {cil_km:,} km): zapsáno {zapsano:,} km – **chybí {chybi:,} km**")
             else:
-                st.warning(f"⚠️ Úsek do {t['datum']} {t['misto']} (cíl {cil_km:,} km): zapsáno {zapsano:,} km – přebývá {-chybi:,} km")
+                st.warning(f"⚠️ Úsek do {datum_str} {t['misto']} (cíl {cil_km:,} km): přebývá {-chybi:,} km")
             prev_km = t["km"]
 
         st.markdown("---")
-
-        # Přidání jízdy
         st.markdown("**Přidat novou jízdu:**")
+
+        col_filter1, col_filter2 = st.columns([2, 2])
+        with col_filter1:
+            filtr_typ = st.multiselect(
+                "Filtr typu",
+                ["pobocka", "sklad", "pobocka_sklad", "pumpa", "domov", "hotel"],
+                default=["pobocka", "sklad", "pobocka_sklad", "domov", "hotel"]
+            )
+        with col_filter2:
+            search = st.text_input("Hledat", placeholder="Brno, Praha, BA...")
+
+        destinace_filtrovane = [
+            name for name, (km, t, typ) in st.session_state.destinace.items()
+            if typ in filtr_typ and (not search or search.lower() in name.lower())
+        ]
+        if not destinace_filtrovane:
+            destinace_filtrovane = list(st.session_state.destinace.keys())
+
         c1, c2, c3, c4 = st.columns([2, 3, 3, 2])
         with c1:
             nove_datum = st.date_input("Datum", value=date(rok, 4, 1), key="nove_datum")
         with c2:
-            odkud = st.selectbox("Odkud", list(st.session_state.destinace.keys()), key="nove_odkud")
+            odkud_idx = 0
+            if "Praha 7 Jankovcova" in destinace_filtrovane:
+                odkud_idx = destinace_filtrovane.index("Praha 7 Jankovcova")
+            odkud = st.selectbox("Odkud", destinace_filtrovane, key="nove_odkud", index=odkud_idx)
         with c3:
-            kam = st.selectbox("Kam", list(st.session_state.destinace.keys()), key="nove_kam", index=1)
+            kam = st.selectbox("Kam", destinace_filtrovane, key="nove_kam",
+                               index=min(1, len(destinace_filtrovane)-1))
         with c4:
             spocteno = vzdalenost(odkud, kam)
             km_pocet = st.number_input("KM", value=spocteno, min_value=0, key="nove_km")
@@ -358,118 +414,159 @@ with st.expander("🚗 Krok 3 – jízdy", expanded=True):
         with c5:
             cas_odj = st.text_input("Čas odjezdu", value="8:00", key="nove_odj")
         with c6:
-            cas_prij = st.text_input("Čas příjezdu", value="9:30", key="nove_prij")
+            cas_min = cas_jizdy(odkud, kam)
+            try:
+                h, m = map(int, cas_odj.split(":"))
+                cas_prij_default = format_cas(h * 60 + m + cas_min)
+            except Exception:
+                cas_prij_default = "9:30"
+            cas_prij = st.text_input("Čas příjezdu", value=cas_prij_default, key="nove_prij")
         with c7:
             ucel = st.selectbox("Účel", UCEL_OPTIONS, key="nove_ucel")
         with c8:
             druh = st.selectbox("Druh", ["služební", ""], key="nove_druh")
 
         if st.button("➕ Přidat jízdu", type="primary"):
-            # Najdi navazující stav km (poslední km_konec, nebo počátek)
             if st.session_state.jizdy:
                 last_km = st.session_state.jizdy[-1]["km_konec"]
             else:
                 last_km = st.session_state.stav_pocatek
 
             nova = {
-                "datum": nove_datum.strftime("%-d.%-m.%Y") if hasattr(nove_datum, "strftime") else str(nove_datum),
-                "odkud": odkud,
-                "kam": kam,
-                "ucel": ucel,
-                "cas_odj": cas_odj,
-                "cas_prij": cas_prij,
-                "druh": druh,
-                "km_zacatek": last_km,
-                "km_konec": last_km + km_pocet,
+                "datum": nove_datum.strftime("%-d.%-m.%Y"),
+                "odkud": odkud, "kam": kam, "ucel": ucel,
+                "cas_odj": cas_odj, "cas_prij": cas_prij, "druh": druh,
+                "km_zacatek": last_km, "km_konec": last_km + km_pocet,
                 "km_pocet": km_pocet,
             }
-
-            # Pokud končí na pumpě, přiřadit tankování
             for t in st.session_state.tankovani:
                 if t["km"] == nova["km_konec"]:
                     nova["litry"] = t["litry"]
                     nova["cena"] = t["cena"]
                     break
-
             st.session_state.jizdy.append(nova)
             st.rerun()
 
-        # Tabulka jízd
         if st.session_state.jizdy:
             st.markdown("**Zapsané jízdy:**")
             df_view = pd.DataFrame(st.session_state.jizdy)
             st.dataframe(df_view, use_container_width=True, hide_index=True)
+            colb1, colb2 = st.columns(2)
+            with colb1:
+                if st.button("🗑️ Smazat poslední"):
+                    st.session_state.jizdy.pop()
+                    st.rerun()
+            with colb2:
+                if st.button("🗑️ Smazat všechny"):
+                    st.session_state.jizdy = []
+                    st.rerun()
 
-            if st.button("🗑️ Smazat poslední jízdu"):
-                st.session_state.jizdy.pop()
-                st.rerun()
+# --- Šablony
+with st.expander("📋 Šablony cest", expanded=False):
+    st.caption("Rychlé přidání typických scénářů. Datum si pak doupravíš.")
+    sablony_datum = st.date_input("Datum začátku", value=date(rok, 4, 1), key="sab_datum")
 
-            if st.button("🗑️ Smazat všechny jízdy"):
-                st.session_state.jizdy = []
-                st.rerun()
+    def pridej_jizdy(jizdy_list, zacatek_datum):
+        last_km = st.session_state.jizdy[-1]["km_konec"] if st.session_state.jizdy else st.session_state.stav_pocatek
+        for j in jizdy_list:
+            datum = zacatek_datum + timedelta(days=j.get("den", 0))
+            km_pocet = vzdalenost(j["odkud"], j["kam"])
+            nova = {
+                "datum": datum.strftime("%-d.%-m.%Y"),
+                "odkud": j["odkud"], "kam": j["kam"], "ucel": j["ucel"],
+                "cas_odj": j["cas_odj"], "cas_prij": j["cas_prij"],
+                "druh": j.get("druh", "služební"),
+                "km_zacatek": last_km, "km_konec": last_km + km_pocet,
+                "km_pocet": km_pocet,
+            }
+            for t in st.session_state.tankovani:
+                if t["km"] == nova["km_konec"]:
+                    nova["litry"] = t["litry"]
+                    nova["cena"] = t["cena"]
+                    break
+            st.session_state.jizdy.append(nova)
+            last_km = nova["km_konec"]
 
-# --- Šablony rychlého přidání
-with st.expander("📋 Šablony – rychlé přidání cesty", expanded=False):
-    st.markdown("Tlačítka pro typické scénáře. Datum si pak doupravíš.")
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.markdown("**SKLC3 + přespání**")
-        if st.button("Přidat cestu na SKLC3 (2 dny)"):
-            datum1 = date(rok, 4, 1)
-            datum2 = date(rok, 4, 2)
-            last_km = st.session_state.jizdy[-1]["km_konec"] if st.session_state.jizdy else st.session_state.stav_pocatek
-            st.session_state.jizdy.extend([
-                {"datum": datum1.strftime("%-d.%-m.%Y"), "odkud": "Praha 7 Jankovcova",
-                 "kam": "SKLC3 (Šakoňská cesta)", "ucel": "Pracovní cesta",
-                 "cas_odj": "7:00", "cas_prij": "11:00", "druh": "služební",
-                 "km_zacatek": last_km, "km_konec": last_km + 340, "km_pocet": 340},
-                {"datum": datum1.strftime("%-d.%-m.%Y"), "odkud": "SKLC3 (Šakoňská cesta)",
-                 "kam": "Bratislava - hotel", "ucel": "Ubytování",
-                 "cas_odj": "17:00", "cas_prij": "17:30", "druh": "",
-                 "km_zacatek": last_km + 340, "km_konec": last_km + 352, "km_pocet": 12},
-                {"datum": datum2.strftime("%-d.%-m.%Y"), "odkud": "Bratislava - hotel",
-                 "kam": "Praha 7 Jankovcova", "ucel": "Návrat",
-                 "cas_odj": "13:00", "cas_prij": "17:30", "druh": "",
-                 "km_zacatek": last_km + 352, "km_konec": last_km + 682, "km_pocet": 330},
-            ])
+        st.markdown("**🇸🇰 SKLC3 + přespání BA (2 dny)**")
+        if st.button("Přidat"):
+            pridej_jizdy([
+                {"odkud": "Praha 7 Jankovcova", "kam": "SKLC3, Šákoňská cesta",
+                 "ucel": "Pracovní cesta", "cas_odj": "7:00", "cas_prij": "11:00", "den": 0},
+                {"odkud": "SKLC3, Šákoňská cesta", "kam": "Bratislava - hotel",
+                 "ucel": "Ubytování", "cas_odj": "17:00", "cas_prij": "17:30", "druh": "", "den": 0},
+                {"odkud": "Bratislava - hotel", "kam": "Praha 7 Jankovcova",
+                 "ucel": "Návrat", "cas_odj": "13:00", "cas_prij": "17:00", "druh": "", "den": 1},
+            ], sablony_datum)
+            st.rerun()
+
+        st.markdown("**🇨🇿 1denní Brno**")
+        if st.button("Přidat ", key="brno"):
+            pridej_jizdy([
+                {"odkud": "Praha 7 Jankovcova", "kam": "Brno - střed, Skořepka",
+                 "ucel": "Pracovní jednání", "cas_odj": "7:00", "cas_prij": "9:30", "den": 0},
+                {"odkud": "Brno - střed, Skořepka", "kam": "Praha 7 Jankovcova",
+                 "ucel": "Návrat", "cas_odj": "16:00", "cas_prij": "18:30", "druh": "", "den": 0},
+            ], sablony_datum)
             st.rerun()
 
     with col2:
-        st.markdown("**Cesta do Brna**")
-        if st.button("Přidat 1denní cestu Brno"):
-            datum1 = date(rok, 4, 1)
-            last_km = st.session_state.jizdy[-1]["km_konec"] if st.session_state.jizdy else st.session_state.stav_pocatek
-            st.session_state.jizdy.extend([
-                {"datum": datum1.strftime("%-d.%-m.%Y"), "odkud": "Praha 7 Jankovcova",
-                 "kam": "Brno", "ucel": "Pracovní jednání",
-                 "cas_odj": "7:00", "cas_prij": "9:30", "druh": "služební",
-                 "km_zacatek": last_km, "km_konec": last_km + 205, "km_pocet": 205},
-                {"datum": datum1.strftime("%-d.%-m.%Y"), "odkud": "Brno",
-                 "kam": "Praha 7 Jankovcova", "ucel": "Návrat",
-                 "cas_odj": "16:00", "cas_prij": "18:30", "druh": "",
-                 "km_zacatek": last_km + 205, "km_konec": last_km + 410, "km_pocet": 205},
-            ])
+        st.markdown("**🇨🇿 1denní ČB**")
+        if st.button("Přidat", key="cb"):
+            pridej_jizdy([
+                {"odkud": "Praha 7 Jankovcova", "kam": "České Budějovice, Průběžná",
+                 "ucel": "Pracovní jednání", "cas_odj": "8:00", "cas_prij": "10:00", "den": 0},
+                {"odkud": "České Budějovice, Průběžná", "kam": "Praha 7 Jankovcova",
+                 "ucel": "Návrat", "cas_odj": "15:00", "cas_prij": "17:00", "druh": "", "den": 0},
+            ], sablony_datum)
+            st.rerun()
+
+        st.markdown("**🇸🇰 SKLC3 + Trnava + BA (2 dny)**")
+        if st.button("Přidat ", key="sk_okruh"):
+            pridej_jizdy([
+                {"odkud": "Praha 7 Jankovcova", "kam": "SKLC3, Šákoňská cesta",
+                 "ucel": "Pracovní cesta", "cas_odj": "7:00", "cas_prij": "11:00", "den": 0},
+                {"odkud": "SKLC3, Šákoňská cesta", "kam": "Trnava, Starohájska",
+                 "ucel": "Schůzka u klienta", "cas_odj": "13:00", "cas_prij": "13:50", "den": 0},
+                {"odkud": "Trnava, Starohájska", "kam": "Bratislava - hotel",
+                 "ucel": "Ubytování", "cas_odj": "17:00", "cas_prij": "18:00", "druh": "", "den": 0},
+                {"odkud": "Bratislava - hotel", "kam": "Praha 7 Jankovcova",
+                 "ucel": "Návrat", "cas_odj": "13:00", "cas_prij": "17:00", "druh": "", "den": 1},
+            ], sablony_datum)
             st.rerun()
 
     with col3:
-        st.markdown("**Cesta do CB**")
-        if st.button("Přidat 1denní cestu ČB"):
-            datum1 = date(rok, 4, 1)
-            last_km = st.session_state.jizdy[-1]["km_konec"] if st.session_state.jizdy else st.session_state.stav_pocatek
-            st.session_state.jizdy.extend([
-                {"datum": datum1.strftime("%-d.%-m.%Y"), "odkud": "Praha 7 Jankovcova",
-                 "kam": "České Budějovice", "ucel": "Pracovní jednání",
-                 "cas_odj": "8:00", "cas_prij": "10:30", "druh": "služební",
-                 "km_zacatek": last_km, "km_konec": last_km + 150, "km_pocet": 150},
-                {"datum": datum1.strftime("%-d.%-m.%Y"), "odkud": "České Budějovice",
-                 "kam": "Praha 7 Jankovcova", "ucel": "Návrat",
-                 "cas_odj": "15:00", "cas_prij": "17:30", "druh": "",
-                 "km_zacatek": last_km + 150, "km_konec": last_km + 300, "km_pocet": 150},
-            ])
+        st.markdown("**🇨🇿 Velký okruh Morava (2 dny)**")
+        if st.button("Přidat ", key="morava"):
+            pridej_jizdy([
+                {"odkud": "Praha 7 Jankovcova", "kam": "Hradec Králové, Hořická",
+                 "ucel": "Pracovní jednání", "cas_odj": "7:00", "cas_prij": "8:30", "den": 0},
+                {"odkud": "Hradec Králové, Hořická", "kam": "Olomouc, Nedvědova",
+                 "ucel": "Schůzka", "cas_odj": "10:00", "cas_prij": "13:00", "den": 0},
+                {"odkud": "Olomouc, Nedvědova", "kam": "Ostrava, Novinářská",
+                 "ucel": "Ubytování", "cas_odj": "15:00", "cas_prij": "16:30", "druh": "", "den": 0},
+                {"odkud": "Ostrava, Novinářská", "kam": "Brno - střed, Skořepka",
+                 "ucel": "Schůzka cestou", "cas_odj": "9:00", "cas_prij": "12:00", "den": 1},
+                {"odkud": "Brno - střed, Skořepka", "kam": "Praha 7 Jankovcova",
+                 "ucel": "Návrat", "cas_odj": "15:00", "cas_prij": "17:30", "druh": "", "den": 1},
+            ], sablony_datum)
             st.rerun()
 
-# --- Souhrnné statistiky
+        st.markdown("**🏙️ Pražské pobočky**")
+        if st.button("Přidat ", key="praha"):
+            pridej_jizdy([
+                {"odkud": "Praha 7 Jankovcova", "kam": "Praha 4, Budějovická",
+                 "ucel": "Pracovní schůzka", "cas_odj": "9:00", "cas_prij": "9:25", "den": 0},
+                {"odkud": "Praha 4, Budějovická", "kam": "Praha 5 - Anděl, Štefánikova",
+                 "ucel": "Schůzka", "cas_odj": "11:00", "cas_prij": "11:20", "den": 0},
+                {"odkud": "Praha 5 - Anděl, Štefánikova", "kam": "Praha 7 Jankovcova",
+                 "ucel": "Návrat", "cas_odj": "13:00", "cas_prij": "13:20", "druh": "", "den": 0},
+            ], sablony_datum)
+            st.rerun()
+
+# --- Souhrn
 if st.session_state.jizdy:
     st.markdown("---")
     st.markdown("### 📊 Souhrn")
@@ -477,47 +574,53 @@ if st.session_state.jizdy:
     najeto = sum(j["km_pocet"] for j in st.session_state.jizdy)
     litry = sum(t["litry"] for t in st.session_state.tankovani)
     cena = sum((t.get("cena") or 0) for t in st.session_state.tankovani)
-
-    col1.metric("Najeto celkem", f"{najeto:,} km".replace(",", " "))
+    col1.metric("Najeto", f"{najeto:,} km".replace(",", " "))
     col2.metric("Spotřeba", f"{litry:.2f} l")
     col3.metric("Cena PHM", f"{cena:,.0f} Kč".replace(",", " "))
     col4.metric("Konečný stav", f"{st.session_state.stav_pocatek + najeto:,} km".replace(",", " "))
 
-# --- KROK 4: Export
+# --- Export
 st.markdown("---")
 st.markdown("### ⬇️ Krok 4 – stáhnout knihu jízd")
-
 if st.session_state.jizdy:
     excel_buffer = export_excel(
-        st.session_state.jizdy,
-        st.session_state.tankovani,
-        f"{mesic} {rok}",
-        st.session_state.stav_pocatek,
+        st.session_state.jizdy, f"{mesic} {rok}", st.session_state.stav_pocatek,
     )
     st.download_button(
-        label="⬇️ Stáhnout Excel knihu jízd",
+        label="⬇️ Stáhnout Excel",
         data=excel_buffer,
         file_name=f"kniha_jizd_{mesic}_{rok}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         type="primary",
     )
 else:
-    st.info("Přidej alespoň jednu jízdu pro export.")
+    st.info("Přidej alespoň jednu jízdu.")
 
-# --- Sidebar: správa destinací
+# --- Sidebar
 with st.sidebar:
-    st.markdown("### 📍 Správa destinací")
-    st.caption("Přidej / uprav vlastní destinace a vzdálenosti od Jankovcové.")
+    st.markdown("### 📍 Databáze destinací")
+    typy = {}
+    for _, (_, _, typ) in st.session_state.destinace.items():
+        typy[typ] = typy.get(typ, 0) + 1
+    typ_labels = {"pobocka": "🏢 Pobočky", "sklad": "📦 Sklady",
+                  "pobocka_sklad": "🏢📦 Pobočky+sklady", "pumpa": "⛽ Pumpy",
+                  "domov": "🏠 Domov", "hotel": "🏨 Hotely"}
+    for typ, count in sorted(typy.items()):
+        st.text(f"{typ_labels.get(typ, typ)}: {count}")
 
-    nove_misto = st.text_input("Nová destinace")
-    nove_km = st.number_input("Vzdálenost od Jankovcové (km)", min_value=0, value=0)
-    if st.button("Přidat destinaci"):
+    st.markdown("---")
+    st.markdown("**Přidat destinaci:**")
+    nove_misto = st.text_input("Název")
+    nove_km = st.number_input("Vzdálenost (km)", min_value=0, value=0)
+    nove_cas = st.number_input("Čas (min)", min_value=0, value=0)
+    nove_typ = st.selectbox("Typ", ["pobocka", "sklad", "pobocka_sklad", "pumpa", "hotel"])
+    if st.button("Přidat"):
         if nove_misto:
-            st.session_state.destinace[nove_misto] = nove_km
-            st.success(f"Přidáno: {nove_misto} ({nove_km} km)")
+            st.session_state.destinace[nove_misto] = (nove_km, nove_cas, nove_typ)
+            st.success(f"Přidáno: {nove_misto}")
             st.rerun()
 
     st.markdown("---")
-    st.markdown("**Aktuální destinace:**")
-    for misto, km in sorted(st.session_state.destinace.items(), key=lambda x: x[1]):
-        st.text(f"{misto}: {km} km")
+    if st.checkbox("Zobrazit všechny destinace"):
+        for misto, (km, cas, typ) in sorted(st.session_state.destinace.items(), key=lambda x: x[1][0]):
+            st.text(f"{km:>4} km | {misto[:30]}")
